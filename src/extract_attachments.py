@@ -6,7 +6,7 @@ from email.policy import default
 from io import BytesIO
 
 SRC_BUCKET = os.environ['SRC_BUCKET']
-SRC_PREFIX = os.environ.get('SRC_PREFIX', 'incoming-emails')
+SRC_PREFIX = os.environ.get('SRC_PREFIX', 'incoming-emails/')
 DEST_BUCKET = os.environ.get('DEST_BUCKET', SRC_BUCKET)
 DEST_PREFIX = os.environ.get('DEST_PREFIX', SRC_PREFIX)
 
@@ -16,7 +16,7 @@ def lambda_handler(event, context):
     notification = json.loads(event['Records'][0]['Sns']['Message'])
     email_id = notification['mail']['messageId']
     print(f"Processing message {email_id}")
-    object_name = f"{SRC_PREFIX}/{email_id}"
+    object_name = f"{SRC_PREFIX}{email_id}"
     
     # Read raw email bytes from S3 into memory
     raw_email = BytesIO()
@@ -31,4 +31,4 @@ def lambda_handler(event, context):
         filename = attachment.get_filename()
         if filename:
             f = BytesIO(attachment.get_content())
-            s3.upload_fileobj(f, DEST_BUCKET, f"{DEST_PREFIX}/{email_id}/{filename}")
+            s3.upload_fileobj(f, DEST_BUCKET, f"{DEST_PREFIX}{email_id}/{filename}")

@@ -16,11 +16,11 @@ resource "aws_sns_topic" "incoming" {
 }
 
 resource "aws_s3_bucket" "incoming_bucket" {
-  bucket = coalesce(var.incoming_bucket_name, "${replace(var.service_name, "_", "-")}-email-attachments")
+  # Use terraform import
 }
 
 resource "aws_s3_bucket" "destination_bucket" {
-  bucket = coalesce(var.incoming_bucket_name, aws_s3_bucket.incoming_bucket.bucket)
+  # Use terraform import
 }
 
 resource "aws_dynamodb_table" "senders_table" {
@@ -80,24 +80,67 @@ resource "aws_lambda_function" "filter_incoming_email" {
   function_name = "${var.service_name}-filter_incoming_email"
   runtime = "python3.9"
   handler = "filter_incoming_email.lambda_handler"
+
   role = aws_iam_role.lambda_exec.arn
+  
   filename = data.archive_file.lambda_filter_incoming_email.output_path
   source_code_hash = data.archive_file.lambda_filter_incoming_email.output_base64sha256
+
+  environment {
+    variables = {
+      DDB_TABLE_NAME = aws_dynamodb_table.senders_table.name
+    }
+  }
 }
 
 resource "aws_lambda_function" "extract_attachments" {
   function_name = "${var.service_name}-extract_attachments"
   runtime = "python3.9"
   handler = "extract_attachments.lambda_handler"
+  
   role = aws_iam_role.lambda_exec.arn
+  
   filename = data.archive_file.lambda_extract_attachments.output_path
   source_code_hash = data.archive_file.lambda_extract_attachments.output_base64sha256
+
+  environment {
+    variables = {
+      SRC_BUCKET = aws_s3_bucket.incoming_bucket.bucket
+      SRC_PREFIX = var.incoming_bucket_prefix
+      DEST_BUCKET = aws_s3_bucket.destination_bucket.bucket
+      DEST_PREFIX = var.destination_bucket_prefix
+    }
+  }
 }
 
 resource "aws_sns_topic_subscription" "extract_attachments" {
   topic_arn = aws_sns_topic.incoming.arn
   protocol  = "lambda"
   endpoint  = aws_lambda_function.extract_attachments.arn
+}
+
+resource "aws_s3_bucket_policy" "allow_ses_write_to_s3" {
+  bucket = aws_s3_bucket.incoming_bucket.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "s3:PutObject"
+      Effect = "Allow"
+      Sid    = "AllowSESPuts"
+      Resource = "${aws_s3_bucket.incoming_bucket.arn}/${var.incoming_bucket_prefix}*"
+      Principal = {
+        Service = "ses.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_lambda_permission" "allow_ses" {
+  statement_id   = "AllowExecutionFromSES"
+  action         = "lambda:InvokeFunction"
+  function_name  = aws_lambda_function.filter_incoming_email.function_name
+  # source_account = "${data.aws_caller_identity.current.account_id}"
+  principal      = "ses.amazonaws.com"
 }
 
 resource "aws_ses_receipt_rule_set" "incoming" {
@@ -130,28 +173,4 @@ resource "aws_ses_receipt_rule" "filter_and_store" {
     aws_s3_bucket.incoming_bucket,
     aws_lambda_function.filter_incoming_email,
   ]
-}
-
-resource "aws_s3_bucket_policy" "allow_ses_write_to_s3" {
-  bucket = aws_s3_bucket.incoming_bucket.id
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "s3:PutObject"
-      Effect = "Allow"
-      Sid    = "AllowSESPuts"
-      Resource = "${aws_s3_bucket.incoming_bucket.arn}/${var.incoming_bucket_prefix}*"
-      Principal = {
-        Service = "ses.amazonaws.com"
-      }
-    }]
-  })
-}
-
-resource "aws_lambda_permission" "allow_ses" {
-  statement_id   = "AllowExecutionFromSES"
-  action         = "lambda:InvokeFunction"
-  function_name  = aws_lambda_function.filter_incoming_email.function_name
-  # source_account = "${data.aws_caller_identity.current.account_id}"
-  principal      = "ses.amazonaws.com"
 }

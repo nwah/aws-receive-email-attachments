@@ -15,38 +15,35 @@ variable "senders_dynamo_table_name" {
   description = "Name of the DynamoDB table used to look up allowed senders"
 
   type    = string
-  # default = "${service_name}-allowed_senders"
   nullable = true
 }
 
-variable "incoming_bucket_name" {
-  description = "Name of the S3 bucket used to store raw emails."
+# variable "incoming_bucket_name" {
+#   description = "Name of the S3 bucket used to store raw emails."
 
-  type    = string
-  # default = "${service_name}-email_attachments"
-  nullable = true
-}
+#   type    = string
+#   nullable = true
+# }
 
 variable "incoming_bucket_prefix" {
   description = "S3 prefix where raw emails should be stored."
 
   type    = string
-  default = "incoming"
+  default = "incoming/"
 }
 
-variable "destination_bucket_name" {
-  description = "Name of the S3 bucket used to store raw emails."
+# variable "destination_bucket_name" {
+#   description = "Name of the S3 bucket used to store raw emails."
 
-  type    = string
-  # default = var.incoming_bucket_name
-  nullable = true
-}
+#   type    = string
+#   nullable = true
+# }
 
 variable "destination_bucket_prefix" {
   description = "S3 prefix where extracted attachments should be stored."
 
   type    = string
-  default = "attachments"
+  default = "attachments/"
 }
 
 variable "recipients" {
